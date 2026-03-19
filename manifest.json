@@ -1,0 +1,32 @@
+{
+  "manifest_version": 2,
+  "name": "Templates Reply",
+  "version": "1.0.3",
+  "description": "Insert your reply in the body of the message",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "stmt@proton.me",
+      "strict_min_version": "109.0"
+    }
+  },
+  "permissions": [
+    "compose",
+    "storage",
+    "notifications",
+    "tabs"
+  ],
+  "background": {
+    "scripts": ["background.js"]
+  },
+  "compose_action": {
+    "default_icon": {
+      "16": "icons/icon.png",
+      "32": "icons/icon.png"
+    },
+    "default_popup": "popup.html"
+  },
+  "options_ui": {
+    "page": "templates_options/templates_options.html",
+    "browser_style": true
+  }
+}
