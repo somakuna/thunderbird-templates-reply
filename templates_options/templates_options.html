@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Manage Templates</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; }
+        #templates-list { margin-top: 20px; border: 1px solid #ccc; padding: 10px; }
+        .template-item { padding: 10px; border-bottom: 1px dashed #eee; display: flex; justify-content: space-between; align-items: center; }
+        .template-item:last-child { border-bottom: none; }
+        .template-name { font-weight: bold; }
+        button { margin-left: 10px; }
+    </style>
+</head>
+<body>
+
+    <h2>Templates manager</h2>
+    
+    <fieldset>
+        <legend id="form-legend">New Template</legend>
+        <form id="template-form">
+            <input type="hidden" id="template-id">
+            
+            <label for="template-name">Title:</label><br>
+            <input type="text" id="template-name" required style="width: 98%; margin-bottom: 10px;"><br>
+            
+            <label for="template-content">Text (HTML/Tekst):</label><br>
+            <textarea id="template-content" required rows="10" style="width: 98%; margin-bottom: 10px;"></textarea><br>
+            
+            <button type="submit" id="save-button">Save</button>
+            <button type="button" id="cancel-edit" style="display: none;">Discard</button>
+        </form>
+    </fieldset>
+
+    <h3>Existing Templates</h3>
+    <div id="templates-list">
+        <p id="no-templates">There is no saved templates.</p>
+    </div>
+
+    <script src="templates_options.js"></script>
+</body>
+</html>
