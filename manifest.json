@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "Templates Reply",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "description": "Insert your reply in the body of the message",
   "browser_specific_settings": {
     "gecko": {
@@ -16,7 +16,7 @@
     "tabs"
   ],
   "background": {
-    "scripts": ["background.js"]
+    "scripts": ["shared.js", "background.js"]
   },
   "compose_action": {
     "default_icon": {

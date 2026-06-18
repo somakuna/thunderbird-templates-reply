@@ -1,33 +1,19 @@
 // popup.js (Updated with "Manage templates" link)
-
-const TEMPLATE_STORAGE_KEY = 'message_templates';
-
-/**
- * Retrieves all templates from Thunderbird 'storage'.
- * * Must be the same function used in templates_options.js.
- */
-async function getTemplates() {
-    try {
-        const result = await browser.storage.local.get(TEMPLATE_STORAGE_KEY);
-        // Returns an empty array if no data is stored
-        return result[TEMPLATE_STORAGE_KEY] || []; 
-    } catch (error) {
-        console.error("Error retrieving templates in popup:", error);
-        return [];
-    }
-}
+// TEMPLATE_STORAGE_KEY, getTemplates, resolveDir and applyUiDirection live in shared.js.
 
 /**
- * Sends a message to background.js with the template text for insertion.
- * @param {string} templateText The content of the template to insert.
+ * Sends a message to background.js with the template content and resolved
+ * direction ('ltr'|'rtl') for insertion.
+ * @param {{content: string, dir?: string}} template The template to insert.
  */
-function insertTemplateAndClose(templateText) {
+function insertTemplateAndClose(template) {
     // Sends a message to background.js (Action is "insertTemplate")
     browser.runtime.sendMessage({
         action: 'insertTemplate',
-        text: templateText
+        text: template.content,
+        dir: resolveDir(template)
     }).catch(e => console.error("Error sending message to background:", e));
-    
+
     // Closes the popup window after sending
     window.close();
 }
@@ -37,20 +23,21 @@ function insertTemplateAndClose(templateText) {
  * Creates buttons for each template, and adds the divider/manage link if templates exist.
  */
 async function renderPopupButtons() {
+    applyUiDirection();
     const templates = await getTemplates();
     const templateList = document.getElementById('template-list');
-    
+
     // Clear old content
-    templateList.innerHTML = ''; 
-    
+    templateList.innerHTML = '';
+
     if (templates.length === 0) {
         // --- LOGIC FOR NO SAVED TEMPLATES (Remains unchanged) ---
         templateList.innerHTML = `
             <p style="font-size: 0.9em; color: #555;">
-                No templates saved. 
+                No templates saved.
                 <a href="#" id="open-options" style="color: blue;">Add them here.</a>
             </p>`;
-            
+
         document.getElementById('open-options').addEventListener('click', (e) => {
             e.preventDefault();
             browser.runtime.openOptionsPage();
@@ -63,29 +50,31 @@ async function renderPopupButtons() {
     templates.forEach(template => {
         const button = document.createElement('button');
         button.textContent = template.name;
-        
+        // Let the template name render in its own base direction (Hebrew/Arabic names).
+        button.dir = 'auto';
+
         // Sets listener for sending the message
         button.addEventListener('click', () => {
-            insertTemplateAndClose(template.content);
+            insertTemplateAndClose(template);
         });
-        
+
         templateList.appendChild(button);
     });
 
     // --- ADD DIVIDER AND 'MANAGE TEMPLATES' LINK (New Section) ---
-    
+
     // 1. Create a horizontal divider (<hr>)
     const divider = document.createElement('hr');
     divider.style.marginTop = '8px';
     divider.style.marginBottom = '8px';
-    templateList.appendChild(divider); 
+    templateList.appendChild(divider);
 
     // 2. Create the link element (<a>)
     const manageLink = document.createElement('a');
     manageLink.href = "#";
     manageLink.id = 'manage-templates';
     manageLink.textContent = 'Manage templates';
-    
+
     // Style the link to match the 'Add them here' style for consistency
     manageLink.style.display = 'block';
     manageLink.style.textAlign = 'center';

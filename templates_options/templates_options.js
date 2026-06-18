@@ -1,6 +1,6 @@
 // templates_options/templates_options.js
-
-const TEMPLATE_STORAGE_KEY = 'message_templates';
+// TEMPLATE_STORAGE_KEY, getTemplates, resolveDir, detectDir, isHtml, htmlToText
+// and applyUiDirection live in ../shared.js (loaded before this script).
 
 // Initialization of IDs
 const templateForm = document.getElementById('template-form');
@@ -9,21 +9,8 @@ const noTemplatesMessage = document.getElementById('no-templates');
 const saveButton = document.getElementById('save-button');
 const cancelButton = document.getElementById('cancel-edit');
 const formLegend = document.getElementById('form-legend');
-
-/**
- * Retrieves all templates from Thunderbird 'storage'
- * @returns {Promise<Array>} Array of template objects
- */
-async function getTemplates() {
-    try {
-        const result = await browser.storage.local.get(TEMPLATE_STORAGE_KEY);
-        // Returns an empty array if no data is stored
-        return result[TEMPLATE_STORAGE_KEY] || []; 
-    } catch (error) {
-        console.error("Error retrieving templates:", error);
-        return [];
-    }
-}
+const dirSelect = document.getElementById('template-dir');
+const contentEditor = document.getElementById('template-content');
 
 /**
  * Saves the array of templates to Thunderbird 'storage'
@@ -38,28 +25,42 @@ async function saveTemplates(templates) {
     }
 }
 
-
 /**
  * Strips HTML tags and trims template content for use as a list preview
  * @param {string} content Raw template content (may contain HTML)
  * @returns {string} A short, single-line preview
  */
 function getPreviewText(content) {
-    const plainText = content.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+    const plainText = (content || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
     const maxLength = 80;
     return plainText.length > maxLength ? `${plainText.slice(0, maxLength)}…` : plainText;
 }
 
 /**
- * Escapes HTML special characters for safe insertion into innerHTML
- * @param {string} text
- * @returns {string}
+ * Applies the selected direction to the rich-text editor so the author sees
+ * the same base direction the template will use.
  */
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
+function applyEditorDir() {
+    const value = dirSelect.value;
+    contentEditor.dir = value === 'ltr' || value === 'rtl' ? value : 'auto';
 }
+
+// --- Rich-text toolbar (execCommand on the contenteditable editor) ---
+document.querySelectorAll('.editor-toolbar [data-cmd]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        const cmd = btn.dataset.cmd;
+        contentEditor.focus();
+        if (cmd === 'createLink') {
+            const url = prompt('Link URL:', 'https://');
+            if (url) document.execCommand('createLink', false, url);
+        } else {
+            document.execCommand(cmd, false, null);
+        }
+    });
+});
+
+dirSelect.addEventListener('change', applyEditorDir);
 
 /**
  * Displays templates on the HTML page
@@ -67,7 +68,7 @@ function escapeHtml(text) {
  */
 function renderTemplates(templates) {
     templateList.innerHTML = ''; // Clear the existing list
-    
+
     if (templates.length === 0) {
         templateList.appendChild(noTemplatesMessage);
         noTemplatesMessage.style.display = 'block';
@@ -78,16 +79,33 @@ function renderTemplates(templates) {
     templates.forEach(template => {
         const item = document.createElement('div');
         item.className = 'template-item';
-        item.innerHTML = `
-            <div class="template-info">
-                <span class="template-name">${escapeHtml(template.name)}</span>
-                <span class="template-preview">${escapeHtml(getPreviewText(template.content))}</span>
-            </div>
-            <div>
-                <button data-id="${template.id}" class="edit-btn">Edit</button>
-                <button data-id="${template.id}" class="delete-btn">Delete</button>
-            </div>
+
+        // Name + preview via textContent (avoids HTML injection) and dir="auto"
+        // so Hebrew/Arabic render in their own base direction.
+        const info = document.createElement('div');
+        info.className = 'template-info';
+
+        const nameSpan = document.createElement('span');
+        nameSpan.className = 'template-name';
+        nameSpan.dir = 'auto';
+        nameSpan.textContent = template.name;
+
+        const preview = document.createElement('span');
+        preview.className = 'template-preview';
+        preview.dir = 'auto';
+        preview.textContent = getPreviewText(template.content);
+
+        info.appendChild(nameSpan);
+        info.appendChild(preview);
+
+        const actions = document.createElement('div');
+        actions.innerHTML = `
+            <button data-id="${template.id}" class="edit-btn">Edit</button>
+            <button data-id="${template.id}" class="delete-btn">Delete</button>
         `;
+
+        item.appendChild(info);
+        item.appendChild(actions);
         templateList.appendChild(item);
     });
 
@@ -105,15 +123,22 @@ function renderTemplates(templates) {
  */
 templateForm.addEventListener('submit', async (e) => {
     e.preventDefault();
-    
+
     const id = document.getElementById('template-id').value;
-    const name = document.getElementById('template-name').value;
-    const content = document.getElementById('template-content').value;
+    const name = document.getElementById('template-name').value.trim();
+    const content = contentEditor.innerHTML.trim();
+    const dir = dirSelect.value;
+
+    if (!content) {
+        alert('Template text cannot be empty.');
+        contentEditor.focus();
+        return;
+    }
 
     let templates = await getTemplates();
 
     const nameTaken = templates.some(
-        t => t.id !== id && t.name.trim().toLowerCase() === name.trim().toLowerCase()
+        t => t.id !== id && t.name.trim().toLowerCase() === name.toLowerCase()
     );
     if (nameTaken) {
         alert(`A template named "${name}" already exists. Please choose a different name.`);
@@ -124,14 +149,14 @@ templateForm.addEventListener('submit', async (e) => {
         // EDITING EXISTING
         const index = templates.findIndex(t => t.id === id);
         if (index > -1) {
-            templates[index] = { id, name, content };
+            templates[index] = { id, name, content, dir };
         }
     } else {
         // ADDING NEW
         const newId = Date.now().toString(); // Simple unique ID
-        templates.push({ id: newId, name, content });
+        templates.push({ id: newId, name, content, dir });
     }
-    
+
     await saveTemplates(templates);
     renderTemplates(templates);
     resetForm();
@@ -146,10 +171,10 @@ async function handleDelete(e) {
     }
     const idToDelete = e.target.dataset.id;
     let templates = await getTemplates();
-    
+
     // Filter to exclude the template with that ID
     templates = templates.filter(t => t.id !== idToDelete);
-    
+
     await saveTemplates(templates);
     renderTemplates(templates);
 }
@@ -161,17 +186,26 @@ async function handleEdit(e) {
     const idToEdit = e.target.dataset.id;
     const templates = await getTemplates();
     const template = templates.find(t => t.id === idToEdit);
-    
+
     if (template) {
         document.getElementById('template-id').value = template.id;
         document.getElementById('template-name').value = template.name;
-        document.getElementById('template-content').value = template.content;
-        
+
+        // Legacy templates stored plain text; render newlines. New ones are HTML.
+        if (isHtml(template.content)) {
+            contentEditor.innerHTML = template.content;
+        } else {
+            contentEditor.textContent = template.content || '';
+        }
+
+        dirSelect.value = template.dir || 'auto';
+        applyEditorDir();
+
         // Update UI to signal editing
         formLegend.textContent = 'Edit Template';
         saveButton.textContent = 'Update Template';
         cancelButton.style.display = 'inline';
-        
+
         // Scroll to the top of the form
         window.scrollTo(0, 0);
     }
@@ -183,7 +217,10 @@ async function handleEdit(e) {
 function resetForm() {
     templateForm.reset();
     document.getElementById('template-id').value = '';
-    
+    contentEditor.innerHTML = '';
+    dirSelect.value = 'auto';
+    applyEditorDir();
+
     formLegend.textContent = 'Add New Template';
     saveButton.textContent = 'Save Template';
     cancelButton.style.display = 'none';
@@ -220,6 +257,13 @@ async function handleExport() {
  */
 function isValidTemplate(t) {
     return t && typeof t.name === 'string' && typeof t.content === 'string';
+}
+
+/**
+ * Normalizes a direction value to a stored value ('auto'|'ltr'|'rtl')
+ */
+function normalizeDir(value) {
+    return value === 'ltr' || value === 'rtl' ? value : 'auto';
 }
 
 /**
@@ -260,14 +304,15 @@ async function handleImportFile(e) {
         // Merge: keep existing templates, append imported ones with fresh IDs
         // to avoid id collisions, skipping exact name+content duplicates.
         const newOnes = importedTemplates
-            .filter(t => !existingTemplates.some(e => e.name === t.name && e.content === t.content))
-            .map((t, i) => ({ name: t.name, content: t.content, id: `${Date.now()}-${i}` }));
+            .filter(t => !existingTemplates.some(ex => ex.name === t.name && ex.content === t.content))
+            .map((t, i) => ({ name: t.name, content: t.content, dir: normalizeDir(t.dir), id: `${Date.now()}-${i}` }));
         finalTemplates = [...existingTemplates, ...newOnes];
     } else {
         // Replace: overwrite everything with the imported templates
         finalTemplates = importedTemplates.map((t, i) => ({
             name: t.name,
             content: t.content,
+            dir: normalizeDir(t.dir),
             id: t.id || `${Date.now()}-${i}`
         }));
     }
@@ -285,6 +330,8 @@ document.getElementById('import-file-input').addEventListener('change', handleIm
 
 // Load templates on page load
 window.addEventListener('load', async () => {
+    applyUiDirection();
+    applyEditorDir();
     const templates = await getTemplates();
     renderTemplates(templates);
 });
