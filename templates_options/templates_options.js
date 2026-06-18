@@ -40,6 +40,28 @@ async function saveTemplates(templates) {
 
 
 /**
+ * Strips HTML tags and trims template content for use as a list preview
+ * @param {string} content Raw template content (may contain HTML)
+ * @returns {string} A short, single-line preview
+ */
+function getPreviewText(content) {
+    const plainText = content.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+    const maxLength = 80;
+    return plainText.length > maxLength ? `${plainText.slice(0, maxLength)}…` : plainText;
+}
+
+/**
+ * Escapes HTML special characters for safe insertion into innerHTML
+ * @param {string} text
+ * @returns {string}
+ */
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+/**
  * Displays templates on the HTML page
  * @param {Array} templates Array of template objects
  */
@@ -57,7 +79,10 @@ function renderTemplates(templates) {
         const item = document.createElement('div');
         item.className = 'template-item';
         item.innerHTML = `
-            <span class="template-name">${template.name}</span>
+            <div class="template-info">
+                <span class="template-name">${escapeHtml(template.name)}</span>
+                <span class="template-preview">${escapeHtml(getPreviewText(template.content))}</span>
+            </div>
             <div>
                 <button data-id="${template.id}" class="edit-btn">Edit</button>
                 <button data-id="${template.id}" class="delete-btn">Delete</button>
@@ -84,9 +109,17 @@ templateForm.addEventListener('submit', async (e) => {
     const id = document.getElementById('template-id').value;
     const name = document.getElementById('template-name').value;
     const content = document.getElementById('template-content').value;
-    
+
     let templates = await getTemplates();
-    
+
+    const nameTaken = templates.some(
+        t => t.id !== id && t.name.trim().toLowerCase() === name.trim().toLowerCase()
+    );
+    if (nameTaken) {
+        alert(`A template named "${name}" already exists. Please choose a different name.`);
+        return;
+    }
+
     if (id) {
         // EDITING EXISTING
         const index = templates.findIndex(t => t.id === id);
