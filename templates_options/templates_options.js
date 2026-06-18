@@ -158,6 +158,98 @@ function resetForm() {
 
 cancelButton.addEventListener('click', resetForm);
 
+/**
+ * Exports all templates as a downloadable JSON file
+ */
+async function handleExport() {
+    const templates = await getTemplates();
+    const exportData = {
+        type: 'thunderbird-templates-reply',
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        templates
+    };
+
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `templates-export-${Date.now()}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+}
+
+/**
+ * Validates that a parsed object looks like a template
+ */
+function isValidTemplate(t) {
+    return t && typeof t.name === 'string' && typeof t.content === 'string';
+}
+
+/**
+ * Reads the chosen file, parses it and merges/replaces stored templates
+ */
+async function handleImportFile(e) {
+    const file = e.target.files[0];
+    e.target.value = ''; // reset so the same file can be re-selected later
+    if (!file) {
+        return;
+    }
+
+    let parsed;
+    try {
+        const text = await file.text();
+        parsed = JSON.parse(text);
+    } catch (error) {
+        alert('Selected file is not a valid JSON file.');
+        return;
+    }
+
+    const importedTemplates = Array.isArray(parsed) ? parsed : parsed.templates;
+    if (!Array.isArray(importedTemplates) || !importedTemplates.every(isValidTemplate)) {
+        alert('This file does not contain a valid templates export.');
+        return;
+    }
+
+    const replace = confirm(
+        `Found ${importedTemplates.length} template(s) in the file.\n\n` +
+        `Click "OK" to MERGE them with your existing templates.\n` +
+        `Click "Cancel" to REPLACE all existing templates with the imported ones.`
+    );
+
+    const existingTemplates = await getTemplates();
+    let finalTemplates;
+
+    if (replace === true) {
+        // Merge: keep existing templates, append imported ones with fresh IDs
+        // to avoid id collisions, skipping exact name+content duplicates.
+        const newOnes = importedTemplates
+            .filter(t => !existingTemplates.some(e => e.name === t.name && e.content === t.content))
+            .map((t, i) => ({ name: t.name, content: t.content, id: `${Date.now()}-${i}` }));
+        finalTemplates = [...existingTemplates, ...newOnes];
+    } else {
+        // Replace: overwrite everything with the imported templates
+        finalTemplates = importedTemplates.map((t, i) => ({
+            name: t.name,
+            content: t.content,
+            id: t.id || `${Date.now()}-${i}`
+        }));
+    }
+
+    await saveTemplates(finalTemplates);
+    renderTemplates(finalTemplates);
+    alert('Templates imported successfully.');
+}
+
+document.getElementById('export-button').addEventListener('click', handleExport);
+document.getElementById('import-button').addEventListener('click', () => {
+    document.getElementById('import-file-input').click();
+});
+document.getElementById('import-file-input').addEventListener('change', handleImportFile);
+
 // Load templates on page load
 window.addEventListener('load', async () => {
     const templates = await getTemplates();
